@@ -17,7 +17,7 @@ import {KoboltToken} from "./KoboltToken.sol";
 ///         control over tokens after they are created.
 contract KoboltFactory is Ownable2Step, ReentrancyGuard {
     /// @notice Hard upper bound on each price, so fees can never be raised to a surprising amount.
-    uint256 public constant MAX_PRICE = 0.005 ether;
+    uint256 public constant MAX_PRICE = 0.02 ether;
 
     struct Prices {
         uint256 base;

@@ -176,7 +176,7 @@ contract KoboltFactoryTest is Test {
     }
 
     function test_EachPriceIsCapped() public {
-        uint256 tooHigh = 0.005 ether + 1;
+        uint256 tooHigh = 0.02 ether + 1;
         vm.startPrank(admin);
         vm.expectRevert(KoboltFactory.FeeTooHigh.selector);
         factory.setPrices(prices(tooHigh, 0, 0, 0));
