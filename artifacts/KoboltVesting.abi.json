@@ -1,0 +1,540 @@
+[
+ {
+  "type": "constructor",
+  "inputs": [
+   {
+    "name": "token_",
+    "type": "address",
+    "internalType": "contract IERC20"
+   },
+   {
+    "name": "owner_",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "MAX_BATCH",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "MAX_DURATION",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "acceptOwnership",
+  "inputs": [],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "claim",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "amount",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "claimable",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "createSchedule",
+  "inputs": [
+   {
+    "name": "beneficiary",
+    "type": "address",
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "internalType": "uint256"
+   },
+   {
+    "name": "start",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "cliff",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "duration",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "createSchedules",
+  "inputs": [
+   {
+    "name": "beneficiaries",
+    "type": "address[]",
+    "internalType": "address[]"
+   },
+   {
+    "name": "amounts",
+    "type": "uint256[]",
+    "internalType": "uint256[]"
+   },
+   {
+    "name": "start",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "cliff",
+    "type": "uint64",
+    "internalType": "uint64"
+   },
+   {
+    "name": "duration",
+    "type": "uint64",
+    "internalType": "uint64"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "firstId",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "getSchedule",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "tuple",
+    "internalType": "struct KoboltVesting.Schedule",
+    "components": [
+     {
+      "name": "beneficiary",
+      "type": "address",
+      "internalType": "address"
+     },
+     {
+      "name": "start",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "cliff",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "duration",
+      "type": "uint64",
+      "internalType": "uint64"
+     },
+     {
+      "name": "total",
+      "type": "uint256",
+      "internalType": "uint256"
+     },
+     {
+      "name": "claimed",
+      "type": "uint256",
+      "internalType": "uint256"
+     }
+    ]
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "owner",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "pendingOwner",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "renounceOwnership",
+  "inputs": [],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "scheduleCount",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "schedulesOf",
+  "inputs": [
+   {
+    "name": "beneficiary",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256[]",
+    "internalType": "uint256[]"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "token",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "address",
+    "internalType": "contract IERC20"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "totalLocked",
+  "inputs": [],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "function",
+  "name": "transferOwnership",
+  "inputs": [
+   {
+    "name": "newOwner",
+    "type": "address",
+    "internalType": "address"
+   }
+  ],
+  "outputs": [],
+  "stateMutability": "nonpayable"
+ },
+ {
+  "type": "function",
+  "name": "vested",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "outputs": [
+   {
+    "name": "",
+    "type": "uint256",
+    "internalType": "uint256"
+   }
+  ],
+  "stateMutability": "view"
+ },
+ {
+  "type": "event",
+  "name": "Claimed",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "beneficiary",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "OwnershipTransferStarted",
+  "inputs": [
+   {
+    "name": "previousOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "newOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "OwnershipTransferred",
+  "inputs": [
+   {
+    "name": "previousOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "newOwner",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "event",
+  "name": "ScheduleCreated",
+  "inputs": [
+   {
+    "name": "id",
+    "type": "uint256",
+    "indexed": true,
+    "internalType": "uint256"
+   },
+   {
+    "name": "beneficiary",
+    "type": "address",
+    "indexed": true,
+    "internalType": "address"
+   },
+   {
+    "name": "amount",
+    "type": "uint256",
+    "indexed": false,
+    "internalType": "uint256"
+   },
+   {
+    "name": "start",
+    "type": "uint64",
+    "indexed": false,
+    "internalType": "uint64"
+   },
+   {
+    "name": "cliff",
+    "type": "uint64",
+    "indexed": false,
+    "internalType": "uint64"
+   },
+   {
+    "name": "duration",
+    "type": "uint64",
+    "indexed": false,
+    "internalType": "uint64"
+   }
+  ],
+  "anonymous": false
+ },
+ {
+  "type": "error",
+  "name": "BatchTooLarge",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "CliffAfterEnd",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "InvalidAmount",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "InvalidBeneficiary",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "InvalidDuration",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "InvalidToken",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "LengthMismatch",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NotBeneficiary",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "NothingToClaim",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "OwnableInvalidOwner",
+  "inputs": [
+   {
+    "name": "owner",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "OwnableUnauthorizedAccount",
+  "inputs": [
+   {
+    "name": "account",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "ReentrancyGuardReentrantCall",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "SafeERC20FailedOperation",
+  "inputs": [
+   {
+    "name": "token",
+    "type": "address",
+    "internalType": "address"
+   }
+  ]
+ },
+ {
+  "type": "error",
+  "name": "UnknownSchedule",
+  "inputs": []
+ },
+ {
+  "type": "error",
+  "name": "UnsupportedToken",
+  "inputs": []
+ }
+]
