@@ -18,10 +18,20 @@ contract KoboltFactoryTest is Test {
     address payable treasury = payable(makeAddr("treasury"));
     address alice = makeAddr("alice");
     address bob = makeAddr("bob");
-    uint256 constant FEE = 0.002 ether;
+
+    uint256 constant BASE = 0.0005 ether;
+    uint256 constant MINT = 0.0003 ether;
+    uint256 constant BURN = 0.0001 ether;
+    uint256 constant PAUSE = 0.0003 ether;
+    /// Fee for the default config below (burnable only).
+    uint256 constant FEE = BASE + BURN;
+
+    function prices(uint256 b, uint256 m, uint256 bu, uint256 p) internal pure returns (KoboltFactory.Prices memory) {
+        return KoboltFactory.Prices({base: b, mintable: m, burnable: bu, pausable: p});
+    }
 
     function setUp() public {
-        factory = new KoboltFactory(admin, treasury, FEE);
+        factory = new KoboltFactory(admin, treasury, prices(BASE, MINT, BURN, PAUSE));
         vm.deal(alice, 10 ether);
         vm.deal(bob, 10 ether);
     }
@@ -80,7 +90,29 @@ contract KoboltFactoryTest is Test {
         factory.createToken{value: FEE}(cfg("Harbor", "HRB"));
     }
 
-    // ------------------------------------------------------------------ fee
+    // -------------------------------------------------------------- pricing
+
+    function test_FeeDependsOnFeatures() public view {
+        KoboltToken.Config memory c = cfg("X", "X");
+        c.burnable = false;
+        assertEq(factory.feeFor(c), BASE);
+        c.burnable = true;
+        assertEq(factory.feeFor(c), BASE + BURN);
+        c.mintable = true;
+        assertEq(factory.feeFor(c), BASE + BURN + MINT);
+        c.pausable = true;
+        assertEq(factory.feeFor(c), BASE + BURN + MINT + PAUSE);
+    }
+
+    function test_PaysFeeForChosenFeatures() public {
+        KoboltToken.Config memory c = cfg("Full", "FULL");
+        c.mintable = true;
+        c.pausable = true;
+        uint256 fee = BASE + MINT + BURN + PAUSE;
+        vm.prank(alice);
+        factory.createToken{value: fee}(c);
+        assertEq(treasury.balance, fee);
+    }
 
     function test_FeeGoesToTreasury() public {
         vm.prank(alice);
@@ -96,13 +128,18 @@ contract KoboltFactoryTest is Test {
         factory.createToken(cfg("Harbor", "HRB"));
         vm.expectRevert(abi.encodeWithSelector(KoboltFactory.WrongFee.selector, FEE, FEE + 1));
         factory.createToken{value: FEE + 1}(cfg("Harbor", "HRB"));
+        // Paying the base price for a mintable token is not enough.
+        KoboltToken.Config memory c = cfg("Harbor", "HRB");
+        c.mintable = true;
+        vm.expectRevert(abi.encodeWithSelector(KoboltFactory.WrongFee.selector, FEE + MINT, FEE));
+        factory.createToken{value: FEE}(c);
         vm.stopPrank();
         assertEq(factory.totalDeployed(), 0);
     }
 
-    function test_ZeroFeeWorks() public {
+    function test_ZeroPricesWork() public {
         vm.prank(admin);
-        factory.setFee(0);
+        factory.setPrices(prices(0, 0, 0, 0));
         vm.prank(alice);
         factory.createToken(cfg("Free", "FREE"));
         assertEq(factory.totalDeployed(), 1);
@@ -121,28 +158,37 @@ contract KoboltFactoryTest is Test {
 
     // ---------------------------------------------------------------- admin
 
-    function test_OnlyOwnerChangesFeeAndTreasury() public {
+    function test_OnlyOwnerChangesPricesAndTreasury() public {
         vm.startPrank(alice);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
-        factory.setFee(0);
+        factory.setPrices(prices(0, 0, 0, 0));
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
         factory.setTreasury(payable(alice));
         vm.stopPrank();
 
         vm.startPrank(admin);
-        factory.setFee(0.001 ether);
+        factory.setPrices(prices(0.001 ether, 0, 0, 0));
         factory.setTreasury(payable(bob));
         vm.stopPrank();
-        assertEq(factory.fee(), 0.001 ether);
+        (uint256 base,,,) = factory.prices();
+        assertEq(base, 0.001 ether);
         assertEq(factory.treasury(), bob);
     }
 
-    function test_FeeIsCapped() public {
-        vm.prank(admin);
+    function test_EachPriceIsCapped() public {
+        uint256 tooHigh = 0.005 ether + 1;
+        vm.startPrank(admin);
         vm.expectRevert(KoboltFactory.FeeTooHigh.selector);
-        factory.setFee(0.05 ether + 1);
+        factory.setPrices(prices(tooHigh, 0, 0, 0));
         vm.expectRevert(KoboltFactory.FeeTooHigh.selector);
-        new KoboltFactory(admin, treasury, 1 ether);
+        factory.setPrices(prices(0, tooHigh, 0, 0));
+        vm.expectRevert(KoboltFactory.FeeTooHigh.selector);
+        factory.setPrices(prices(0, 0, tooHigh, 0));
+        vm.expectRevert(KoboltFactory.FeeTooHigh.selector);
+        factory.setPrices(prices(0, 0, 0, tooHigh));
+        vm.stopPrank();
+        vm.expectRevert(KoboltFactory.FeeTooHigh.selector);
+        new KoboltFactory(admin, treasury, prices(1 ether, 0, 0, 0));
     }
 
     function test_RejectsZeroTreasury() public {
@@ -150,7 +196,7 @@ contract KoboltFactoryTest is Test {
         vm.expectRevert(KoboltFactory.ZeroAddress.selector);
         factory.setTreasury(payable(address(0)));
         vm.expectRevert(KoboltFactory.ZeroAddress.selector);
-        new KoboltFactory(admin, payable(address(0)), FEE);
+        new KoboltFactory(admin, payable(address(0)), prices(BASE, MINT, BURN, PAUSE));
     }
 
     function test_OwnershipTransferNeedsAcceptance() public {
@@ -166,8 +212,9 @@ contract KoboltFactoryTest is Test {
         KoboltToken.Config memory c = cfg("Harbor", "HRB");
         c.mintable = true;
         c.pausable = true;
+        uint256 fee = factory.feeFor(c);
         vm.prank(alice);
-        KoboltToken token = KoboltToken(factory.createToken{value: FEE}(c));
+        KoboltToken token = KoboltToken(factory.createToken{value: fee}(c));
 
         vm.startPrank(admin);
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, admin));
@@ -190,13 +237,18 @@ contract KoboltFactoryTest is Test {
         assertEq(treasury.balance, 0);
     }
 
-    function testFuzz_CountMatchesDeploys(uint8 n) public {
+    function testFuzz_CountAndFeesMatchDeploys(uint8 n, bool mint, bool burn, bool pause) public {
         n = uint8(bound(n, 0, 20));
+        KoboltToken.Config memory c = cfg("Token", "TKN");
+        c.mintable = mint;
+        c.burnable = burn;
+        c.pausable = pause;
+        uint256 fee = factory.feeFor(c);
         for (uint256 i = 0; i < n; i++) {
             vm.prank(alice);
-            factory.createToken{value: FEE}(cfg("Token", "TKN"));
+            factory.createToken{value: fee}(c);
         }
         assertEq(factory.totalDeployed(), n);
-        assertEq(treasury.balance, FEE * n);
+        assertEq(treasury.balance, fee * n);
     }
 }

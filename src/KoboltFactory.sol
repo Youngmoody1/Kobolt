@@ -6,18 +6,27 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {KoboltToken} from "./KoboltToken.sol";
 
 /// @title KoboltFactory
-/// @notice Creates KoboltTokens for a small fixed fee and keeps an on-chain count
-///         of every token it has created, which the Kobolt website shows live.
+/// @notice Creates KoboltTokens for a small fee and keeps an on-chain count of every
+///         token it has created, which the Kobolt website shows live.
 ///
-///         The creator pays `fee` in the chain's native coin (ETH on Base). The fee
-///         goes straight to `treasury`; the factory never holds funds. The creator
-///         becomes the owner of the new token. Kobolt has no control over tokens
-///         after they are created.
+///         The fee depends on what the token can do: a base price, plus a small add-on
+///         for each owner power (minting, pausing) and for burning. `feeFor(config)`
+///         returns the exact price. The creator pays it in the chain's native coin
+///         (ETH on Base); it goes straight to `treasury` and the factory never holds
+///         funds. The creator becomes the owner of the new token. Kobolt has no
+///         control over tokens after they are created.
 contract KoboltFactory is Ownable2Step, ReentrancyGuard {
-    /// @notice Hard upper bound on the fee, so it can never be raised to a surprising amount.
-    uint256 public constant MAX_FEE = 0.05 ether;
+    /// @notice Hard upper bound on each price, so fees can never be raised to a surprising amount.
+    uint256 public constant MAX_PRICE = 0.005 ether;
 
-    uint256 public fee;
+    struct Prices {
+        uint256 base;
+        uint256 mintable;
+        uint256 burnable;
+        uint256 pausable;
+    }
+
+    Prices public prices;
     address payable public treasury;
 
     /// @notice Every token created here, in order. `allTokens.length == totalDeployed()`.
@@ -34,7 +43,7 @@ contract KoboltFactory is Ownable2Step, ReentrancyGuard {
         string symbol,
         uint256 feePaid
     );
-    event FeeChanged(uint256 oldFee, uint256 newFee);
+    event PricesChanged(uint256 base, uint256 mintable, uint256 burnable, uint256 pausable);
     event TreasuryChanged(address oldTreasury, address newTreasury);
 
     error WrongFee(uint256 expected, uint256 sent);
@@ -42,15 +51,24 @@ contract KoboltFactory is Ownable2Step, ReentrancyGuard {
     error ZeroAddress();
     error FeeTransferFailed();
 
-    constructor(address initialOwner, address payable treasury_, uint256 fee_) Ownable(initialOwner) {
+    constructor(address initialOwner, address payable treasury_, Prices memory prices_) Ownable(initialOwner) {
         if (treasury_ == address(0)) revert ZeroAddress();
-        if (fee_ > MAX_FEE) revert FeeTooHigh();
         treasury = treasury_;
-        fee = fee_;
+        _setPrices(prices_);
     }
 
-    /// @notice Creates a token owned by the caller. `msg.value` must equal `fee` exactly.
+    /// @notice The exact fee for creating a token with this config.
+    function feeFor(KoboltToken.Config calldata config) public view returns (uint256 total) {
+        Prices memory p = prices;
+        total = p.base;
+        if (config.mintable) total += p.mintable;
+        if (config.burnable) total += p.burnable;
+        if (config.pausable) total += p.pausable;
+    }
+
+    /// @notice Creates a token owned by the caller. `msg.value` must equal `feeFor(config)` exactly.
     function createToken(KoboltToken.Config calldata config) external payable nonReentrant returns (address token) {
+        uint256 fee = feeFor(config);
         if (msg.value != fee) revert WrongFee(fee, msg.value);
 
         token = address(new KoboltToken(config, msg.sender));
@@ -79,10 +97,16 @@ contract KoboltFactory is Ownable2Step, ReentrancyGuard {
 
     // ---------------------------------------------------------------- owner
 
-    function setFee(uint256 newFee) external onlyOwner {
-        if (newFee > MAX_FEE) revert FeeTooHigh();
-        emit FeeChanged(fee, newFee);
-        fee = newFee;
+    function setPrices(Prices calldata newPrices) external onlyOwner {
+        _setPrices(newPrices);
+    }
+
+    function _setPrices(Prices memory p) private {
+        if (p.base > MAX_PRICE || p.mintable > MAX_PRICE || p.burnable > MAX_PRICE || p.pausable > MAX_PRICE) {
+            revert FeeTooHigh();
+        }
+        prices = p;
+        emit PricesChanged(p.base, p.mintable, p.burnable, p.pausable);
     }
 
     function setTreasury(address payable newTreasury) external onlyOwner {
