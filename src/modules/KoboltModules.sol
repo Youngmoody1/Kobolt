@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -62,6 +63,8 @@ contract KoboltModules is Ownable2Step, ReentrancyGuard {
     Lock[] private _locks;
     mapping(address => uint256[]) private _locksByOwner;
     mapping(address => uint256[]) private _locksByAsset;
+    /// @dev NFTs currently held for a lock, so one NFT can never back two locks.
+    mapping(address => mapping(uint256 => bool)) private _nftLocked;
 
     uint256 public totalVaults;
     uint256 public totalPools;
@@ -93,6 +96,9 @@ contract KoboltModules is Ownable2Step, ReentrancyGuard {
     error StillLocked();
     error AlreadyWithdrawn();
     error UnsupportedToken();
+    error NotNftOwner();
+    error NftAlreadyLocked();
+    error UseLockNft();
 
     constructor(address initialOwner, address payable treasury_, Prices memory prices_) Ownable(initialOwner) {
         if (treasury_ == address(0)) revert ZeroAddress();
@@ -170,6 +176,8 @@ contract KoboltModules is Ownable2Step, ReentrancyGuard {
         if (address(asset) == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         _checkUnlock(unlockAt, block.timestamp);
+        // An NFT sent here would be stuck: withdraw() sends ERC-20s with transfer(), which NFTs don't have.
+        if (_isErc721(address(asset))) revert UseLockNft();
         _takeFee(prices.lock);
         uint256 before = asset.balanceOf(address(this));
         asset.safeTransferFrom(msg.sender, address(this), amount);
@@ -187,9 +195,12 @@ contract KoboltModules is Ownable2Step, ReentrancyGuard {
     {
         if (address(asset) == address(0)) revert ZeroAddress();
         _checkUnlock(unlockAt, block.timestamp);
+        if (_nftLocked[address(asset)][tokenId]) revert NftAlreadyLocked();
+        if (asset.ownerOf(tokenId) != msg.sender) revert NotNftOwner();
         _takeFee(prices.lock);
         asset.transferFrom(msg.sender, address(this), tokenId);
         if (asset.ownerOf(tokenId) != address(this)) revert UnsupportedToken();
+        _nftLocked[address(asset)][tokenId] = true;
         id = _newLock(address(asset), AssetKind.ERC721, tokenId, unlockAt);
     }
 
@@ -219,6 +230,7 @@ contract KoboltModules is Ownable2Step, ReentrancyGuard {
         if (l.kind == AssetKind.ERC20) {
             IERC20(l.asset).safeTransfer(l.owner, l.amount);
         } else {
+            _nftLocked[l.asset][l.amount] = false;
             IERC721(l.asset).transferFrom(address(this), l.owner, l.amount);
         }
         emit Unlocked(id, l.owner, l.amount);
@@ -254,6 +266,23 @@ contract KoboltModules is Ownable2Step, ReentrancyGuard {
 
     function locksByAsset(address asset) external view returns (uint256[] memory) {
         return _locksByAsset[asset];
+    }
+
+    /// @notice Paged versions of locksOf / locksByAsset, for wallets or assets with very many locks.
+    function locksOfPaged(address owner_, uint256 offset, uint256 limit) external view returns (uint256[] memory) {
+        return _slice(_locksByOwner[owner_], offset, limit);
+    }
+
+    function locksByAssetPaged(address asset, uint256 offset, uint256 limit) external view returns (uint256[] memory) {
+        return _slice(_locksByAsset[asset], offset, limit);
+    }
+
+    function locksOfCount(address owner_) external view returns (uint256) {
+        return _locksByOwner[owner_].length;
+    }
+
+    function locksByAssetCount(address asset) external view returns (uint256) {
+        return _locksByAsset[asset].length;
     }
 
     // ------------------------------------------------------------ owner
@@ -296,6 +325,24 @@ contract KoboltModules is Ownable2Step, ReentrancyGuard {
         _locksByOwner[msg.sender].push(id);
         _locksByAsset[asset].push(id);
         emit Locked(id, msg.sender, asset, kind, amount, unlockAt);
+    }
+
+    function _slice(uint256[] storage list, uint256 offset, uint256 limit) private view returns (uint256[] memory out) {
+        uint256 n = list.length;
+        if (offset >= n) return new uint256[](0);
+        uint256 end = offset + limit > n ? n : offset + limit;
+        out = new uint256[](end - offset);
+        for (uint256 i = offset; i < end; i++) {
+            out[i - offset] = list[i];
+        }
+    }
+
+    function _isErc721(address asset) private view returns (bool) {
+        try IERC165(asset).supportsInterface(0x80ac58cd) returns (bool yes) {
+            return yes;
+        } catch {
+            return false;
+        }
     }
 
     function _ownLock(uint256 id) private view returns (Lock storage l) {

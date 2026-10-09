@@ -44,7 +44,7 @@ contract KoboltStakingPool is Ownable2Step, ReentrancyGuard {
     uint256 private _rate; // reward per second, scaled by PRECISION
     uint256 private _last;
     uint256 private _rpt;
-    uint256 private _pool;
+    uint256 private _pool; // undistributed rewards, scaled by PRECISION so no fraction is ever dropped
     mapping(address => Account) private _accounts;
 
     event Staked(address indexed account, uint256 amount);
@@ -57,6 +57,7 @@ contract KoboltStakingPool is Ownable2Step, ReentrancyGuard {
     error MoreThanStaked();
     error NothingToClaim();
     error UnsupportedToken();
+    error RenounceDisabled();
 
     constructor(IERC20 token_, address owner_, uint256 maxAprBps_, uint256 duration_, uint256 maturity_)
         Ownable(owner_)
@@ -76,12 +77,17 @@ contract KoboltStakingPool is Ownable2Step, ReentrancyGuard {
     function fund(uint256 amount) external onlyOwner nonReentrant {
         _updatePool();
         if (amount > 0) _pull(amount);
-        _pool += amount;
-        if (_pool == 0) revert InvalidAmount();
-        _rate = (_pool * PRECISION) / duration;
+        _pool += amount * PRECISION;
+        if (_pool / PRECISION == 0) revert InvalidAmount();
+        _rate = _pool / duration;
         periodFinish = block.timestamp + duration;
         _last = block.timestamp;
-        emit Funded(amount, _pool, periodFinish);
+        emit Funded(amount, _pool / PRECISION, periodFinish);
+    }
+
+    /// @dev Leftover rewards can only be re-spread by the owner (fund(0)), so the pool must always have one.
+    function renounceOwnership() public view override onlyOwner {
+        revert RenounceDisabled();
     }
 
     // ------------------------------------------------------------ stakers
@@ -139,7 +145,7 @@ contract KoboltStakingPool is Ownable2Step, ReentrancyGuard {
 
     /// @notice Funded rewards not yet handed out to stakers.
     function undistributed() external view returns (uint256) {
-        return _pool - _pendingEmission();
+        return (_pool - _pendingEmission()) / PRECISION;
     }
 
     /// @notice Reward tokens per year at the current rate, before the APR cap.
@@ -156,13 +162,14 @@ contract KoboltStakingPool is Ownable2Step, ReentrancyGuard {
         if (token.balanceOf(address(this)) - before != amount) revert UnsupportedToken();
     }
 
+    /// @dev Rewards emitted since the last update, scaled by PRECISION.
     function _pendingEmission() private view returns (uint256 emitted) {
         uint256 end = block.timestamp < periodFinish ? block.timestamp : periodFinish;
         if (totalStaked == 0 || end <= _last) return 0;
         uint256 dt = end - _last;
-        emitted = (_rate * dt) / PRECISION;
+        emitted = _rate * dt;
         if (maxAprBps > 0) {
-            uint256 cap = (totalStaked * maxAprBps * dt) / (10_000 * YEAR);
+            uint256 cap = (totalStaked * maxAprBps * dt * PRECISION) / (10_000 * YEAR);
             if (emitted > cap) emitted = cap;
         }
         if (emitted > _pool) emitted = _pool;
@@ -170,13 +177,17 @@ contract KoboltStakingPool is Ownable2Step, ReentrancyGuard {
 
     function _rewardPerToken() private view returns (uint256) {
         if (totalStaked == 0) return _rpt;
-        return _rpt + (_pendingEmission() * PRECISION) / totalStaked;
+        return _rpt + _pendingEmission() / totalStaked;
     }
 
     function _updatePool() private {
         uint256 emitted = _pendingEmission();
-        if (totalStaked > 0) _rpt += (emitted * PRECISION) / totalStaked;
-        _pool -= emitted;
+        if (totalStaked > 0) {
+            uint256 perToken = emitted / totalStaked;
+            _rpt += perToken;
+            // Only what was actually credited leaves the pool; the remainder carries over.
+            _pool -= perToken * totalStaked;
+        }
         uint256 end = block.timestamp < periodFinish ? block.timestamp : periodFinish;
         if (end > _last) _last = end;
     }

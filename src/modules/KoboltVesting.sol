@@ -52,6 +52,7 @@ contract KoboltVesting is Ownable2Step, ReentrancyGuard {
     error LengthMismatch();
     error BatchTooLarge();
     error UnsupportedToken();
+    error InvalidStart();
 
     constructor(IERC20 token_, address owner_) Ownable(owner_) {
         if (address(token_) == address(0)) revert InvalidToken();
@@ -131,9 +132,14 @@ contract KoboltVesting is Ownable2Step, ReentrancyGuard {
         private
         returns (uint256 id)
     {
-        if (beneficiary == address(0)) revert InvalidBeneficiary();
+        // The vault and the token can never call claim(), so tokens for them would be stuck forever.
+        if (beneficiary == address(0) || beneficiary == address(this) || beneficiary == address(token)) {
+            revert InvalidBeneficiary();
+        }
         if (amount == 0) revert InvalidAmount();
         if (duration == 0 || duration > MAX_DURATION) revert InvalidDuration();
+        // Guards against a start in milliseconds or far in the future, which would lock tokens for ages.
+        if (start > block.timestamp + MAX_DURATION) revert InvalidStart();
         if (cliff > duration) revert CliffAfterEnd();
         id = _schedules.length;
         _schedules.push(Schedule(beneficiary, start, cliff, duration, amount, 0));

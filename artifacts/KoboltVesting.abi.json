@@ -471,6 +471,11 @@
  },
  {
   "type": "error",
+  "name": "InvalidStart",
+  "inputs": []
+ },
+ {
+  "type": "error",
   "name": "InvalidToken",
   "inputs": []
  },

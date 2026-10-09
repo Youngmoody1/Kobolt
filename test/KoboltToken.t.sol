@@ -125,6 +125,11 @@ contract KoboltTokenTest is Test {
     function test_TransferOwnershipMovesAdminPowers() public {
         KoboltToken t = deploy("OWN", 100 * UNIT, 0, true, true, false);
         t.transferOwnership(alice);
+        // Two steps: nothing changes until alice accepts.
+        assertEq(t.owner(), owner);
+        assertEq(t.pendingOwner(), alice);
+        vm.prank(alice);
+        t.acceptOwnership();
         assertEq(t.owner(), alice);
 
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, owner));

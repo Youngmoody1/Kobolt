@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 /// @title KoboltToken
 /// @notice Configurable ERC-20 created through the Kobolt factory.
@@ -10,12 +10,14 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 ///         Every setting is fixed at creation and can never change:
 ///           name, symbol, decimals    metadata
 ///           initialSupply             base units minted to the owner
-///           maxSupply                 cap for minting in base units, 0 = no cap
+///           maxSupply                 most tokens that can ever be minted, in base units
+///                                     (0 = no cap; for fixed tokens it equals initialSupply)
 ///           mintable, burnable, pausable  feature switches
 ///
-///         The creator (not the factory) becomes the owner. The contract is not
-///         upgradeable and has no fees, taxes or blacklist.
-contract KoboltToken is ERC20, Ownable {
+///         The creator (not the factory) becomes the owner. Ownership moves in two steps
+///         (the new owner must accept) and cannot be renounced while transfers are paused.
+///         The contract is not upgradeable and has no fees, taxes or blacklist.
+contract KoboltToken is ERC20, Ownable2Step {
     uint8 private immutable _decimals;
     uint256 public immutable maxSupply;
     bool public immutable mintable;
@@ -23,6 +25,8 @@ contract KoboltToken is ERC20, Ownable {
     bool public immutable pausable;
 
     bool public paused;
+    /// @notice Every token ever minted, including ones burned since. Burning never makes room to mint more.
+    uint256 public totalMinted;
 
     event Paused(bool paused);
 
@@ -37,6 +41,8 @@ contract KoboltToken is ERC20, Ownable {
     error PausingDisabled();
     error TransfersPaused();
     error ZeroAmount();
+    error FixedTokenMaxSupply();
+    error RenounceWhilePaused();
 
     struct Config {
         string name;
@@ -50,20 +56,24 @@ contract KoboltToken is ERC20, Ownable {
     }
 
     constructor(Config memory c, address owner_) ERC20(c.name, c.symbol) Ownable(owner_) {
-        uint256 nameLength = bytes(c.name).length;
-        if (nameLength == 0 || nameLength > 64) revert InvalidName();
+        if (!_isValidName(bytes(c.name))) revert InvalidName();
         if (!_isValidSymbol(bytes(c.symbol))) revert InvalidSymbol();
         if (c.decimals > 18) revert InvalidDecimals();
         if (c.maxSupply != 0 && c.maxSupply < c.initialSupply) revert MaxSupplyBelowInitialSupply();
         if (!c.mintable && c.initialSupply == 0) revert FixedTokenNeedsInitialSupply();
+        if (!c.mintable && c.maxSupply != 0 && c.maxSupply != c.initialSupply) revert FixedTokenMaxSupply();
 
         _decimals = c.decimals;
-        maxSupply = c.maxSupply;
+        // A fixed token can never grow, so its cap is its initial supply.
+        maxSupply = c.mintable ? c.maxSupply : c.initialSupply;
         mintable = c.mintable;
         burnable = c.burnable;
         pausable = c.pausable;
 
-        if (c.initialSupply > 0) _mint(owner_, c.initialSupply);
+        if (c.initialSupply > 0) {
+            totalMinted = c.initialSupply;
+            _mint(owner_, c.initialSupply);
+        }
     }
 
     function decimals() public view override returns (uint8) {
@@ -75,7 +85,9 @@ contract KoboltToken is ERC20, Ownable {
     function mint(address to, uint256 amount) external onlyOwner {
         if (!mintable) revert MintingDisabled();
         if (amount == 0) revert ZeroAmount();
-        if (maxSupply != 0 && totalSupply() + amount > maxSupply) revert MintExceedsMaxSupply();
+        uint256 minted = totalMinted + amount;
+        if (maxSupply != 0 && minted > maxSupply) revert MintExceedsMaxSupply();
+        totalMinted = minted;
         _mint(to, amount);
     }
 
@@ -89,6 +101,12 @@ contract KoboltToken is ERC20, Ownable {
         if (!pausable) revert PausingDisabled();
         paused = false;
         emit Paused(false);
+    }
+
+    /// @dev Renouncing while paused would freeze every holder's balance forever.
+    function renounceOwnership() public override onlyOwner {
+        if (paused) revert RenounceWhilePaused();
+        super.renounceOwnership();
     }
 
     // --------------------------------------------------------------- holders
@@ -106,6 +124,15 @@ contract KoboltToken is ERC20, Ownable {
     function _update(address from, address to, uint256 value) internal override {
         if (paused) revert TransfersPaused();
         super._update(from, to, value);
+    }
+
+    /// @dev 1-64 printable ASCII characters, so names can't hide control or right-to-left characters.
+    function _isValidName(bytes memory n) private pure returns (bool) {
+        if (n.length == 0 || n.length > 64) return false;
+        for (uint256 i = 0; i < n.length; i++) {
+            if (n[i] < 0x20 || n[i] > 0x7E) return false;
+        }
+        return true;
     }
 
     function _isValidSymbol(bytes memory s) private pure returns (bool) {
